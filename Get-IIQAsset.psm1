@@ -49,28 +49,29 @@ $IIQTypeData = @{
 }
 Update-TypeData @IIQTypeData -Force
 
-function Initialize-IIQModule { # should get bearer via secure string - better to redo this to prompt for each value, accept null/empty for optionals but skip if so. try to persist by default and notify if not admin.
-	#Or have a switch for bearer and then it prompts for secure input if so
+function Initialize-IIQModule {
 	param (
-		[Parameter(Mandatory)][string]$IIQSubdomain,
-		[Parameter()][ValidateNotNullOrEmpty()][string]$IIQBearerToken,
-		[Parameter()][ValidateNotNullOrEmpty()][string]$JamfDomain,
-		[Parameter()][switch]$Persist
+		[Alias("s")][Parameter(Mandatory)][string]$IIQSubdomain,
+		[Alias("j")][Parameter()][ValidateNotNullOrEmpty()][string]$JamfDomain,
+		[Alias("b")][Parameter()][switch]$UseBearerAuth,
+		[Alias("p")][Parameter()][switch]$Persist
 	)
 
 	$Env:IIQSubdomain = $IIQSubdomain
-	if ($IIQBearerToken) { $Env:IIQBearerToken = ConvertTo-SecureString -String $IIQBearerToken -AsPlainText -Force | ConvertFrom-SecureString }
 	if ($JamfDomain) { $Env:JamfDomain = $JamfDomain }
+	if ($BearerAuthentication) {
+		$IIQBearerToken = Read-Host -Prompt "IIQ Bearer Token" -AsSecureString
+		$Env:IIQBearerToken = ConvertFrom-SecureString $IIQBearerToken
+	}
 
 	if ($Persist) {
 		if (([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
 			[System.Environment]::SetEnvironmentVariable('IIQSubdomain', $IIQSubdomain, 'User')
-			if ($BearerToken) { [System.Environment]::SetEnvironmentVariable('IIQBearerToken', $Env:IIQBearerToken, 'User') }
+			if ($BearerAuthentication) { [System.Environment]::SetEnvironmentVariable('IIQBearerToken', $Env:IIQBearerToken, 'User') }
 			if ($JamfDomain) { [System.Environment]::SetEnvironmentVariable('JamfDomain', $JamfDomain, 'User') }
 		}
 		else {
 			Write-Error "Command must be run as administrator to persist connection. Initialized for this session only."
-			return
 		}
 	}
 }
