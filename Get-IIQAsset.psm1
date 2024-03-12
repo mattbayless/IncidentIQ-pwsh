@@ -54,25 +54,20 @@ function Initialize-IIQModule {
 		[Alias("s")][Parameter(Mandatory)][string]$IIQSubdomain,
 		[Alias("j")][Parameter()][ValidateNotNullOrEmpty()][string]$JamfDomain,
 		[Alias("b")][Parameter()][switch]$UseBearerAuth,
-		[Alias("p")][Parameter()][switch]$Persist
+		[Alias("p")][Parameter()][switch]$PersistInProfile
 	)
 
 	$Env:IIQSubdomain = $IIQSubdomain
 	if ($JamfDomain) { $Env:JamfDomain = $JamfDomain }
 	if ($BearerAuthentication) {
-		$IIQBearerToken = Read-Host -Prompt "IIQ Bearer Token" -AsSecureString
-		$Env:IIQBearerToken = ConvertFrom-SecureString $IIQBearerToken
+		$Env:IIQBearerToken = Read-Host -Prompt "IIQ Bearer Token" -AsSecureString
 	}
 
-	if ($Persist) {
-		if (([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-			[System.Environment]::SetEnvironmentVariable('IIQSubdomain', $IIQSubdomain, 'User')
-			if ($BearerAuthentication) { [System.Environment]::SetEnvironmentVariable('IIQBearerToken', $Env:IIQBearerToken, 'User') }
-			if ($JamfDomain) { [System.Environment]::SetEnvironmentVariable('JamfDomain', $JamfDomain, 'User') }
-		}
-		else {
-			Write-Error "Command must be run as administrator to persist connection. Initialized for this session only."
-		}
+	if ($PersistInProfile) {
+		if (!(Test-Path $PROFILE)) { New-Item $PROFILE -Force }
+		Add-Content -Path $PROFILE -Value "`$Env:IIQSubdomain = $IIQSubdomain"
+		if ($JamfDomain) { Add-Content -Path $PROFILE -Value "`$Env:JamfDomain = $JamfDomain" }
+		if ($BearerAuthentication) { Add-Content -Path $PROFILE -Value "`$Env:IIQBearerToken = ConvertTo-SecureString `"$(ConvertFrom-SecureString $Env:IIQBearerToken)`"" }
 	}
 }
 
