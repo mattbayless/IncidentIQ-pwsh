@@ -1,4 +1,4 @@
-
+#TODO: add overall module help here
 
 class IIQAsset {
 	[ValidateNotNullOrEmpty()] [string]$iiqID
@@ -49,26 +49,55 @@ $IIQTypeData = @{
 }
 Update-TypeData @IIQTypeData -Force
 
-function Initialize-IIQModule {
+$ConfigFile = "$PSScriptRoot\config.json" #user may not have access to this folder - can the module resolve the user's appdata or something path? what about non-windows systems? https://github.com/PoshCode/Configuration?tab=readme-ov-file#configuration-path
+function LoadConfigTable {
+	# $ConfigTable.GetEnumerator() | ForEach-Object { New-Variable -Name $_.Key -Value $_.Value -Scope Script }
+	foreach ($key in 'IIQSubdomain','IIQBearerToken','JamfDomain') {
+		New-Variable -Name $key -Value $ConfigTable[$key] -Scope Script
+	}
+}
+
+if (Test-Path $ConfigFile) {
+	$ConfigTable = ConvertFrom-Json -InputObject $ConfigFile -AsHashtable
+	LoadConfigTable
+}
+
+function Initialize-IIQModule { #TODO change variable scope from ENV to SCRIPT
 	param (
 		[Alias("s")][Parameter(Mandatory)][string]$IIQSubdomain,
 		[Alias("j")][Parameter()][ValidateNotNullOrEmpty()][string]$JamfDomain,
 		[Alias("b")][Parameter()][switch]$UseBearerAuth,
-		[Alias("p")][Parameter()][switch]$PersistInProfile
-	)
+		# [Parameter()][switch]$SkipValidation,
+		# [Alias("p")][Parameter()][switch]$PersistInProfile,
+		[Parameter()][switch]$SessionOnly
+		)
 
-	$Env:IIQSubdomain = $IIQSubdomain
-	if ($JamfDomain) { $Env:JamfDomain = $JamfDomain }
-	if ($BearerAuthentication) {
-		$Env:IIQBearerToken = Read-Host -Prompt "IIQ Bearer Token" -AsSecureString
+	#TODO: Validate these values (ping sites, test auth with token)
+	# This needs to happen after getting the bearer token. Should test with stored bearer if not overwriting too.
+	# if (!$SkipValidation) {
+	# 	# No way to validate iiq address
+	# 	# Test bearer token at iiq subdomain
+	# 	if ($null -ne $IIQBearerToken) {
+	# 				try {
+	# 					Invoke-WebRequest -Uri
+	# 				}
+	# 				catch {
+	# 					throw "Invalid bearer token or IIQ subdomain."
+	# 				}
+	# 	}
+	# }
+	# Load config file to table if extant
+	if (Test-Path $ConfigFile) {$ConfigTable = ConvertFrom-Json -InputObject $ConfigFile -AsHashtable}
+	else {$ConfigTable = @{}}
+	# Overwrite applicable values
+	$ConfigTable.IIQSubdomain = $IIQSubdomain
+	if ($JamfDomain) { $ConfigTable.JamfDomain = $JamfDomain }
+	if ($UseBearerAuth) { $ConfigTable.IIQBearerToken = ConvertFrom-SecureString (Read-Host -Prompt "IIQ Bearer Token" -AsSecureString) } #TODO: how to clear stored bearer token? {if $usebearerauth -eq $false} doesn't allow just changing subdomain. Not graceful but for now could just enter nothing at prompt
+	if (!$SessionOnly) {
+		# Write to file
+		ConvertTo-Json -InputObject $ConfigTable | Out-File $ConfigFile -Force
 	}
-
-	if ($PersistInProfile) {
-		if (!(Test-Path $PROFILE)) { New-Item $PROFILE -Force }
-		Add-Content -Path $PROFILE -Value "`$Env:IIQSubdomain = $IIQSubdomain"
-		if ($JamfDomain) { Add-Content -Path $PROFILE -Value "`$Env:JamfDomain = $JamfDomain" }
-		if ($BearerAuthentication) { Add-Content -Path $PROFILE -Value "`$Env:IIQBearerToken = ConvertTo-SecureString `"$(ConvertFrom-SecureString $Env:IIQBearerToken)`"" }
-	}
+	LoadConfigTable
 }
 
 # function Connect-IIQ {
@@ -76,7 +105,6 @@ function Initialize-IIQModule {
 # 		[Parameter(Mandatory)][pscredential]$Credential,
 # 		[ValidateNotNullOrEmpty]$IIQSubdomain
 # 	)
-# 	if ($IIQSubdomain) { $Env:IIQSubdomain = $IIQSubdomain }
 
 	# Untested spec code from Duet AI
 	# $Username = $Credential.UserName
@@ -135,33 +163,21 @@ function Get-IIQAsset {
 		JamfURL
 	#>
 	[Alias("ga")]
-	[CmdletBinding(DefaultParameterSetName = "AssetTag")] #Doesn't seem like an auth method is being required now
+	[CmdletBinding(DefaultParameterSetName = "AssetTag")]
 	[OutputType('IIQAsset')]
 	param (
 		[Alias("at", "a")][Parameter(Mandatory, ParameterSetName = "AssetTag", ValueFromPipeline, Position = 0)][string]$AssetTag, #TODO add foreach to process and make these arrays
-		[Alias("s", "sn", "SerialNumber")][Parameter(Mandatory, ParameterSetName = "Serial", ValueFromPipeline, Position = 0)][string]$Serial, #TODO add foreach to process and make these arrays
-		# [Parameter()][ValidateNotNullOrEmpty()][securestring]$BearerToken,
-		[Parameter()][ValidateNotNullOrEmpty()][PSCredential]$Credential
-		# ,[Parameter()][ValidateNotNullOrEmpty()][string]$IIQSubdomain = $Env:IIQSubdomain
-		# ,[Parameter()][ValidateNotNullOrEmpty()][string]$JamfDomain = $Env:JamfDomain
-		<# could force running connect-iiq; could see about setting defaults only if they exist; could change connect-iiq to set defaultparametervalues instead of env variables but then that doesn't persist.
-		Initialize-IIQModule for subdomain and jamf values set as env variables; if bearer token provided then store that I guess
-		   Could change persist behavior to add to defaultparametervalues in $profile
-		   $profilecontents = get-content $profile
-		   switch ($profilecontents) {
-			$null {write-host "profile is empty"}
-			default {write-error "unhandled exception"}
-		   }
-		   if !get-content $profile, $profile = "psdefaultparametervalues *IIQ*$IIQSubdomain = $IIQSubdomain; *IIQ*$JamfDomain = $JamfDomain etc"
-		#>
-
+		[Alias("s", "sn", "SerialNumber")][Parameter(Mandatory, ParameterSetName = "Serial", ValueFromPipeline, Position = 0)][string]$Serial #TODO add foreach to process and make these arrays
+		# ,[Parameter()][ValidateNotNullOrEmpty()][PSCredential]$Credential
 	)
 	begin {
-		if (!(Test-Path Env:IIQSubdomain)) { throw "Initialize-IIQModule must be run first." }
-		if (Test-Path Env:IIQBearerToken) { $Authorization = "Bearer " + (ConvertTo-SecureString $Env:IIQBearerToken | ConvertFrom-SecureString -AsPlainText) }
+		if (!(Test-Path Variable:Script:IIQSubdomain)) { throw "Initialize-IIQModule must be run first." }
+		if (Test-Path Variable:Script:IIQBearerToken) { $Authorization = "Bearer " + (ConvertTo-SecureString $Script:IIQBearerToken | ConvertFrom-SecureString -AsPlainText) }
 		else {
-			if (!$Credential) { $Credential = Get-Credential -Title "IIQ credential request" -Message "Enter your credentials for $Env:IIQSubdomain.incidentiq.com." }
-			Connect-IIQ -Credential $Credential -ErrorAction Stop
+			# if (!$Credential) { $Credential = Get-Credential -Title "IIQ credential request" -Message "Enter your credentials for $Script:IIQSubdomain.incidentiq.com." }
+			# Connect-IIQ -Credential $Credential -ErrorAction Stop
+			# Start background job to renew token before/when it expires? Can it pause the process while renewing?
+			throw "Bearer token must be set in Initialize-IIQModule"
 		}
 		$Headers = @{
 			"Client"        = "ApiClient"
@@ -177,22 +193,22 @@ function Get-IIQAsset {
 		switch ($PSCmdlet.ParameterSetName) {
 			"AssetTag" {
 				$Query = $AssetTag.Trim()
-				$Request = Invoke-WebRequest -Method Get -Headers $Headers -Uri "https://$Env:IIQSubdomain.incidentiq.com/services/assets/assettag/$Query"
+				$Request = Invoke-WebRequest -Method Get -Headers $Headers -Uri "https://$Script:IIQSubdomain.incidentiq.com/services/assets/assettag/$Query"
 			}
 			"Serial" {
 				$Query = $Serial.Trim()
-				$Request = Invoke-WebRequest -Method Get -Headers $Headers -Uri "https://$Env:IIQSubdomain.incidentiq.com/services/assets/serial/$Query"
+				$Request = Invoke-WebRequest -Method Get -Headers $Headers -Uri "https://$Script:IIQSubdomain.incidentiq.com/services/assets/serial/$Query"
 			}
 		}
 
-		switch ($Request.StatusCode) {
+		switch ($Request.StatusCode) { #TODO: which error code comes up for invalid creds/bearer, and/or wrong subdomain? error message should recommend checking/fixing those
 			200 {
 				$Converted = ConvertFrom-Json $Request.Content
 				switch ($Converted.ItemCount) {
 					1 {
 						if ('jamf' -in $Converted.Items.DataMappings.Lookups.AppId) {
 							$JamfID = $Converted.Items.DataMappings.Lookups.Where({ $_.AppId -eq 'jamf' -and $_.Key -eq 'ExternalId' }).Value.Substring(6) #MOBILE vs computers ...?
-							if ($Env:JamfDomain) { $JamfURL = "$Env:JamfDomain/mobileDevices.html?id=$JamfID" }
+							if ($Script:JamfDomain) { $JamfURL = "$Script:JamfDomain/mobileDevices.html?id=$JamfID" }
 						}
 						$DeviceName = try { (ConvertFrom-Json $Converted.Items.CustomFieldValues.Where({ $_.EditorTypeID -eq 0 }).Value).AssetName } catch { $null } #ErrorAction Ignore doesn't work here
 
@@ -207,7 +223,7 @@ function Get-IIQAsset {
 							$JamfID,
 							$Converted.Items.DataMappings.Lookups.Where({ $_.AppId -eq 'microsoftSCCM' -and $_.Key -eq 'ExternalId' }).Value,
 							$DeviceName,
-							"https://$Env:IIQSubdomain.incidentiq.com/agent/assets/$($Converted.Items.AssetId)",
+							"https://$Script:IIQSubdomain.incidentiq.com/agent/assets/$($Converted.Items.AssetId)",
 							$JamfURL
 						)
 					}
