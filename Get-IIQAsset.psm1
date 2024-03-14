@@ -53,12 +53,12 @@ $ConfigFile = "$PSScriptRoot\config.json" #user may not have access to this fold
 function LoadConfigTable {
 	# $ConfigTable.GetEnumerator() | ForEach-Object { New-Variable -Name $_.Key -Value $_.Value -Scope Script }
 	foreach ($key in 'IIQSubdomain','IIQBearerToken','JamfDomain') {
-		New-Variable -Name $key -Value $ConfigTable[$key] -Scope Script
+		New-Variable -Name $key -Value $ConfigTable[$key] -Scope Script -Force
 	}
 }
 
 if (Test-Path $ConfigFile) {
-	$ConfigTable = ConvertFrom-Json -InputObject $ConfigFile -AsHashtable
+	$ConfigTable = Get-Content $ConfigFile | ConvertFrom-Json -AsHashtable
 	LoadConfigTable
 }
 
@@ -87,7 +87,7 @@ function Initialize-IIQModule { #TODO change variable scope from ENV to SCRIPT
 	# 	}
 	# }
 	# Load config file to table if extant
-	if (Test-Path $ConfigFile) {$ConfigTable = ConvertFrom-Json -InputObject $ConfigFile -AsHashtable}
+	if (Test-Path $ConfigFile) {$ConfigTable = Get-Content $ConfigFile | ConvertFrom-Json -AsHashtable}
 	else {$ConfigTable = @{}}
 	# Overwrite applicable values
 	$ConfigTable.IIQSubdomain = $IIQSubdomain
