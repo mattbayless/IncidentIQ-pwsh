@@ -49,7 +49,8 @@ $IIQTypeData = @{
 }
 Update-TypeData @IIQTypeData -Force
 
-$ConfigFile = "$PSScriptRoot\config.json" #user may not have access to this folder - can the module resolve the user's appdata or something path? what about non-windows systems? https://github.com/PoshCode/Configuration?tab=readme-ov-file#configuration-path
+# $ConfigFile = "$PSScriptRoot\config.json" #user may not have access to this folder - can the module resolve the user's appdata or something path? what about non-windows systems? https://github.com/PoshCode/Configuration?tab=readme-ov-file#configuration-path
+$ConfigFile = "$(Split-Path $PROFILE -Parent)\IIQAssetsconfig.json"
 function LoadConfigTable {
 	# $ConfigTable.GetEnumerator() | ForEach-Object { New-Variable -Name $_.Key -Value $_.Value -Scope Script }
 	foreach ($key in 'IIQSubdomain','IIQBearerToken','JamfDomain') {
@@ -166,7 +167,7 @@ function Get-IIQAsset {
 	[CmdletBinding(DefaultParameterSetName = "AssetTag")]
 	[OutputType('IIQAsset')]
 	param (
-		[Alias("at", "a")][Parameter(Mandatory, ParameterSetName = "AssetTag", ValueFromPipeline, Position = 0)][string]$AssetTag, #TODO add foreach to process and make these arrays
+		[Alias("at", "a")][Parameter(Mandatory, ParameterSetName = "AssetTag", ValueFromPipeline, Position = 0)][string]$AssetTag, #TODO add foreach to process and make these arrays, also write-progress for arrays
 		[Alias("s", "sn", "SerialNumber")][Parameter(Mandatory, ParameterSetName = "Serial", ValueFromPipeline, Position = 0)][string]$Serial #TODO add foreach to process and make these arrays
 		# ,[Parameter()][ValidateNotNullOrEmpty()][PSCredential]$Credential
 	)
@@ -185,7 +186,7 @@ function Get-IIQAsset {
 			"Content-Type"  = "application/json"
 		}
 	}
-	process {
+	process { #TODO write-progress
 		$DeviceName = $null
 		$JamfID = $null
 		$JamfURL = $null
