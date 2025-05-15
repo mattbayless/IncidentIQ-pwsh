@@ -209,9 +209,12 @@ function Get-IIQAsset {
 					1 {
 						if ('jamf' -in $Converted.Items.DataMappings.Lookups.AppId) {
 							$JamfID = $Converted.Items.DataMappings.Lookups.Where({ $_.AppId -eq 'jamf' -and $_.Key -eq 'ExternalId' }).Value.Substring(6) #MOBILE vs computers ...?
+							$DeviceName = try { (ConvertFrom-Json $Converted.Items.CustomFieldValues.Where({ $_.EditorTypeID -eq 0 }).Value).AssetName } catch { $null } #ErrorAction Ignore doesn't work here
 							if ($Script:JamfDomain) { $JamfURL = "$Script:JamfDomain/mobileDevices.html?id=$JamfID" }
 						}
-						$DeviceName = try { (ConvertFrom-Json $Converted.Items.CustomFieldValues.Where({ $_.EditorTypeID -eq 0 }).Value).AssetName } catch { $null } #ErrorAction Ignore doesn't work here
+						elseif ('microsoftSccm' -in $Converted.Items.DataMappings.Lookups.AppId) {
+							$DeviceName = try { (((ConvertFrom-Json $Converted.Items.CustomFieldValues.Where({ $_.EditorTypeID -eq 0 }).Value).DistinguishedName) -split '^CN=([^,]+)')[1] } catch { $null }
+						}
 
 						return [IIQAsset]::new(
 							$Converted.Items.AssetId,
